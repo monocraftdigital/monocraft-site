@@ -143,6 +143,17 @@ function buildGallery() {
   gallery.appendChild(frag);
 }
 
+// Ring cards stay lazy (no src) until hover, so at rest they'd show nothing.
+// The poster is a small local JPEG frame grabbed from each video (public/
+// posters/<slug>.jpg, same slug as the video filename) -- it costs one small
+// image instead of the full video, and is replaced by real video the moment
+// ensureVideoSource() assigns src on hover.
+function posterFor(asset) {
+  const filename = asset.src.split("/").pop();
+  const slug = filename.replace(/\.mp4$/i, "");
+  return `public/posters/${slug}.jpg`;
+}
+
 function createMedia(asset, opts) {
   opts = opts || {};
   const v = document.createElement("video");
@@ -152,6 +163,7 @@ function createMedia(asset, opts) {
   v.setAttribute("playsinline", "");
   v.setAttribute("webkit-playsinline", "");
   v.preload = opts.lazy ? "none" : "auto";
+  if (opts.lazy) v.poster = posterFor(asset);
   v.addEventListener("error", () => {
     const err = v.error;
     console.error("[video error]", asset.src, err && err.code, err && err.message);
@@ -235,13 +247,13 @@ function pullOut(card, opts) {
   const gx = dxs, gy = dys * Math.cos(T) + fwd * Math.sin(T), gz = -dys * Math.sin(T) + fwd * Math.cos(T);
   const phi = angleOf(card) * DEG, cosP = Math.cos(phi), sinP = Math.sin(phi);
   gsap.to(card.cardEl, { x: gx * cosP + gy * sinP, y: -gx * sinP + gy * cosP, z: gz,
-    scale: scl, duration: dur, ease: "power3.out", overwrite: true });
+    rotationY: 0, scale: scl, duration: dur, ease: "power3.out", overwrite: true });
   ensureVideoSource(card);
   attemptPlay(card.media);
 }
 function restoreCard(card, duration) {
   card.cardEl.classList.remove("is-active");
-  gsap.to(card.cardEl, { x: 0, y: 0, z: 0, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
+  gsap.to(card.cardEl, { x: 0, y: 0, z: 0, rotationY: ROT_Y, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
   card.media.pause();
   // Only seek back to 0 once the video actually has data. Resetting
   // currentTime on a still-loading element (readyState 0) interrupts its
