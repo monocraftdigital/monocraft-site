@@ -246,14 +246,20 @@ function pullOut(card, opts) {
   const T = TILT * DEG;
   const gx = dxs, gy = dys * Math.cos(T) + fwd * Math.sin(T), gz = -dys * Math.sin(T) + fwd * Math.cos(T);
   const phi = angleOf(card) * DEG, cosP = Math.cos(phi), sinP = Math.sin(phi);
+  // card.el's own rotationZ (angleOf) is what walks it around the ring, but
+  // .item-card inherits that rotation as a child -- so a card sitting near
+  // the 3/9 o'clock position is rotated ~90deg and a landscape video reads
+  // as portrait even once rotationY is flattened. Counter-rotating cardEl
+  // by the negative of that same angle cancels it out, so every card ends
+  // up upright and landscape on hover regardless of where it sits.
   gsap.to(card.cardEl, { x: gx * cosP + gy * sinP, y: -gx * sinP + gy * cosP, z: gz,
-    rotationY: 0, scale: scl, duration: dur, ease: "power3.out", overwrite: true });
+    rotationY: 0, rotationZ: -angleOf(card), scale: scl, duration: dur, ease: "power3.out", overwrite: true });
   ensureVideoSource(card);
   attemptPlay(card.media);
 }
 function restoreCard(card, duration) {
   card.cardEl.classList.remove("is-active");
-  gsap.to(card.cardEl, { x: 0, y: 0, z: 0, rotationY: ROT_Y, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
+  gsap.to(card.cardEl, { x: 0, y: 0, z: 0, rotationY: ROT_Y, rotationZ: 0, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
   card.media.pause();
   // Only seek back to 0 once the video actually has data. Resetting
   // currentTime on a still-loading element (readyState 0) interrupts its
