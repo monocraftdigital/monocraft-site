@@ -110,10 +110,35 @@ function computeGeometry() {
 function angleOf(card) { return card.index * INC - 90 + ringRot + introOffset; }
 function depthOpacity(rotZdeg) { const back = Math.cos(rotZdeg * DEG); return 1 - (back + 1) * 0.25; }
 
+// Reads the actual rendered 3D matrix of each ancestor (gallery, the ring
+// item, the card face) and returns the exact inverse rotation -- applying
+// this to the media element cancels out however those ancestors are
+// oriented, so the video/image always renders as a flat, upright rectangle
+// facing the camera, regardless of where the card sits on the ring or how
+// it's tilted. Working from the real computed matrices (rather than
+// guessing the rotationX/Y/Z composition order GSAP would use) is what
+// makes this exact instead of approximate.
+function flattenTransform(ancestors) {
+  let m = new DOMMatrix();
+  for (const el of ancestors) {
+    const cs = getComputedStyle(el).transform;
+    m = m.multiply(cs && cs !== "none" ? new DOMMatrix(cs) : new DOMMatrix());
+  }
+  m.m41 = 0; m.m42 = 0; m.m43 = 0; // keep rotation/scale only, drop translation
+  return m.inverse();
+}
+
 function updateRing() {
   for (const card of items) {
     const rotZ = angleOf(card); card.depth = depthOpacity(rotZ);
-    gsap.set(card.el, { rotationZ: rotZ }); gsap.set(card.cardEl, { opacity: card.depth });
+    gsap.set(card.el, { rotationZ: rotZ });
+    gsap.set(card.cardEl, { opacity: card.depth });
+    // The ring card itself (.item-card) stays edge-on at all times, exactly
+    // like the rest of the ring -- no rotation animation on hover. This is
+    // a permanent per-frame correction on the media element only (set
+    // instantly, same as rotationZ above), not an animated effect, so
+    // there's no visible "spin."
+    card.media.style.transform = flattenTransform([gallery, card.el, card.cardEl]).toString();
   }
 }
 
@@ -246,20 +271,14 @@ function pullOut(card, opts) {
   const T = TILT * DEG;
   const gx = dxs, gy = dys * Math.cos(T) + fwd * Math.sin(T), gz = -dys * Math.sin(T) + fwd * Math.cos(T);
   const phi = angleOf(card) * DEG, cosP = Math.cos(phi), sinP = Math.sin(phi);
-  // card.el's own rotationZ (angleOf) is what walks it around the ring, but
-  // .item-card inherits that rotation as a child -- so a card sitting near
-  // the 3/9 o'clock position is rotated ~90deg and a landscape video reads
-  // as portrait even once rotationY is flattened. Counter-rotating cardEl
-  // by the negative of that same angle cancels it out, so every card ends
-  // up upright and landscape on hover regardless of where it sits.
   gsap.to(card.cardEl, { x: gx * cosP + gy * sinP, y: -gx * sinP + gy * cosP, z: gz,
-    rotationY: 0, rotationZ: -angleOf(card), scale: scl, duration: dur, ease: "power3.out", overwrite: true });
+    scale: scl, duration: dur, ease: "power3.out", overwrite: true });
   ensureVideoSource(card);
   attemptPlay(card.media);
 }
 function restoreCard(card, duration) {
   card.cardEl.classList.remove("is-active");
-  gsap.to(card.cardEl, { x: 0, y: 0, z: 0, rotationY: ROT_Y, rotationZ: 0, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
+  gsap.to(card.cardEl, { x: 0, y: 0, z: 0, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
   card.media.pause();
   // Only seek back to 0 once the video actually has data. Resetting
   // currentTime on a still-loading element (readyState 0) interrupts its
