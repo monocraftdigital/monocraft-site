@@ -243,16 +243,23 @@ let pendingHitCard, pendingHitTimer;
 const HOVER_SETTLE_MS = 70;
 function onPointerMove(e) {
   if (isMobile) return;
+  // While a project is active, the enlarged preview box is what's actually
+  // visible on screen over that patch of the ring (it's opaque, z-index:5) --
+  // but the box itself stays pointer-events:none (so the ring underneath is
+  // reachable at rest, before anything is active -- otherwise the whole top
+  // arc, which sits under where the box would be, could never be hovered in
+  // the first place). That means elementFromPoint still resolves to whatever
+  // ring card is geometrically behind the cursor even when hovering visibly
+  // *over* the preview box/sound button, which would tear down and rebuild
+  // the preview out from under the cursor on the way to the button. So: once
+  // a card is active, treat the whole preview box's rect as "stay put" by
+  // comparing raw coordinates instead of relying on elementFromPoint/
+  // pointer-events -- it's inert exactly when there's nothing to protect.
+  if (activeCard) {
+    const r = previewImgWrap.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return;
+  }
   const target = document.elementFromPoint(e.clientX, e.clientY);
-  // The sound button is the one pointer-events:auto exception inside the
-  // otherwise pass-through preview box (see .sound-toggle in styles.css) --
-  // without this bail-out, moving onto/around the button reads as hovering
-  // whatever ring card happens to be geometrically behind that pixel, and
-  // tearing/rebuilding the preview out from under the cursor. This only
-  // covers the button's own (deliberately enlarged) hit area, NOT the whole
-  // preview box, so the ring underneath the rest of the box -- including the
-  // entire top arc -- still gets real hover events.
-  if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
   const card = hit ? hit._card : null;
   if (card === activeCard || card === pendingHitCard) return;
