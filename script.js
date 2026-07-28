@@ -88,6 +88,41 @@ const mpCat = document.getElementById("mpCat");
 const mpTitle = document.getElementById("mpTitle");
 const mobilePreview = document.getElementById("mobilePreview");
 const ringHitbox = document.getElementById("ringHitbox");
+const previewSoundBtn = document.getElementById("previewSound");
+const mpSoundBtn = document.getElementById("mpSound");
+let activePreviewMedia = null, activeMobilePreviewMedia = null;
+
+// The center preview is the one deliberate, single-project view (as opposed
+// to the 40 muted ring cards, where unmuted audio would overlap into noise
+// as the cursor crosses them) -- sound only turns on via an explicit click,
+// which is also what keeps browsers' autoplay-with-sound restrictions from
+// silently blocking playback (hover alone doesn't count as a user gesture).
+function setPreviewSoundState(unmuted) {
+  if (!previewSoundBtn) return;
+  previewSoundBtn.classList.toggle("is-unmuted", unmuted);
+  previewSoundBtn.setAttribute("aria-pressed", unmuted ? "true" : "false");
+}
+function setMobileSoundState(unmuted) {
+  if (!mpSoundBtn) return;
+  mpSoundBtn.classList.toggle("is-unmuted", unmuted);
+  mpSoundBtn.setAttribute("aria-pressed", unmuted ? "true" : "false");
+}
+if (previewSoundBtn) {
+  previewSoundBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!activePreviewMedia) return;
+    activePreviewMedia.muted = !activePreviewMedia.muted;
+    setPreviewSoundState(!activePreviewMedia.muted);
+  });
+}
+if (mpSoundBtn) {
+  mpSoundBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!activeMobilePreviewMedia) return;
+    activeMobilePreviewMedia.muted = !activeMobilePreviewMedia.muted;
+    setMobileSoundState(!activeMobilePreviewMedia.muted);
+  });
+}
 
 function computeGeometry() {
   const vw = window.innerWidth, vh = window.innerHeight;
@@ -209,6 +244,14 @@ const HOVER_SETTLE_MS = 70;
 function onPointerMove(e) {
   if (isMobile) return;
   const target = document.elementFromPoint(e.clientX, e.clientY);
+  // The center preview box sits visually on top of the ring but is
+  // pointer-events:none everywhere except the sound button, so the ring
+  // underneath still gets treated as "hit" while the cursor crosses it --
+  // without this bail-out, moving toward the sound button reads as hovering
+  // whatever ring card happens to be geometrically behind that pixel, and
+  // tearing/rebuilding the preview out from under the cursor. Treat being
+  // anywhere over the preview box as "stay on the current selection."
+  if (target && target.closest("#previewImg")) return;
   const hit = target && target.closest(".item");
   const card = hit ? hit._card : null;
   if (card === activeCard || card === pendingHitCard) return;
@@ -231,7 +274,7 @@ function setActive(card) {
   if (card === activeCard) return;
   const prev = activeCard; activeCard = card;
   if (prev) restoreCard(prev);
-  if (card) { pullOut(card); setPreview(card); } else { center.classList.remove("show-project"); }
+  if (card) { pullOut(card); setPreview(card); } else { clearPreview(); center.classList.remove("show-project"); }
 }
 
 function pullOut(card, opts) {
@@ -263,12 +306,25 @@ function restoreCard(card, duration) {
   if (card.media.readyState > 0) card.media.currentTime = 0;
 }
 function setPreview(card) {
-  previewImgWrap.innerHTML = "";
+  const oldVideo = previewImgWrap.querySelector("video");
+  if (oldVideo) oldVideo.remove();
   const media = createMedia(card.asset, { autoplay: true });
-  previewImgWrap.appendChild(media);
+  previewImgWrap.prepend(media);
   previewCat.textContent = card.project.category; previewTitle.textContent = card.project.title;
   center.classList.add("show-project");
   gsap.fromTo(media, { opacity: 0.35 }, { opacity: 1, duration: 0.5 });
+  activePreviewMedia = media;
+  setPreviewSoundState(false);
+}
+// Opacity-fading the center box out (see the .show-project CSS toggle above)
+// doesn't stop playback -- without this the previous project's audio would
+// keep playing, inaudible-but-invisible, after the cursor leaves the ring.
+function clearPreview() {
+  if (activePreviewMedia) activePreviewMedia.pause();
+  const oldVideo = previewImgWrap.querySelector("video");
+  if (oldVideo) oldVideo.remove();
+  activePreviewMedia = null;
+  setPreviewSoundState(false);
 }
 
 const MOBILE_OPTS = { out: MOBILE_SELECTED_OUT, z: MOBILE_SELECTED_Z, scale: MOBILE_SELECTED_SCALE, duration: MOBILE_TRANSITION };
@@ -285,10 +341,13 @@ function updateMobileSelection() {
 }
 function updateMobilePreview(card) {
   mpCat.textContent = card.project.category; mpTitle.textContent = card.project.title;
-  mpImgWrap.innerHTML = "";
+  const oldVideo = mpImgWrap.querySelector("video");
+  if (oldVideo) oldVideo.remove();
   const media = createMedia(card.asset, { autoplay: true });
-  mpImgWrap.appendChild(media);
+  mpImgWrap.prepend(media);
   gsap.fromTo(media, { opacity: 0.3 }, { opacity: 1, duration: MOBILE_TRANSITION, overwrite: true });
+  activeMobilePreviewMedia = media;
+  setMobileSoundState(false);
 }
 
 let mobileDragging = false, mobileVelocity = 0;
