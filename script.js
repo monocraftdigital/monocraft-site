@@ -241,8 +241,21 @@ function setupItems() {
 
 let pendingHitCard, pendingHitTimer;
 const HOVER_SETTLE_MS = 70;
-function onPointerMove(e) {
-  if (isMobile) return;
+// document.elementFromPoint() forces a synchronous layout/hit-test pass --
+// on a page with 40 constantly 3D-transformed cards that's genuinely
+// expensive, and a raw "mousemove" listener can fire many dozens of times
+// per second during real, continuous mouse movement (as opposed to the
+// discrete jumps used while testing this), which was saturating the main
+// thread enough to starve video network/decode callbacks -- videos would
+// simply never finish loading during active mouse movement in real usage,
+// even though the exact same interaction tested as discrete steps always
+// worked. Coalesce to at most one hit-test per animation frame (still up to
+// ~60/sec, plenty responsive) instead of one per raw event.
+let lastPointerX = null, lastPointerY = null, pointerRafQueued = false;
+function processPointer() {
+  pointerRafQueued = false;
+  if (lastPointerX === null) return;
+  applyParallax(lastPointerX, lastPointerY);
   // Freezing the WHOLE preview box while a project is active (an earlier
   // version of this) was wrong: the box is a big 16:9 rectangle sitting over
   // most of the ring's top arc, so most cards' hitboxes fall inside its
@@ -250,11 +263,8 @@ function onPointerMove(e) {
   // stopped working almost everywhere, not just near the sound button. The
   // sound button is the one actual pointer-events:auto spot inside the
   // otherwise pass-through box; only bail out for that (deliberately
-  // enlarged) hit zone. A fast, continuous mouse path toward it won't dwell
-  // on any one ring card long enough to trip the debounce below, so this
-  // alone is enough to make the button reachable without also freezing the
-  // rest of the ring.
-  const target = document.elementFromPoint(e.clientX, e.clientY);
+  // enlarged) hit zone.
+  const target = document.elementFromPoint(lastPointerX, lastPointerY);
   if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
   const card = hit ? hit._card : null;
@@ -273,6 +283,11 @@ function onPointerMove(e) {
   pendingHitTimer = setTimeout(() => {
     if (pendingHitCard === card) setActive(card);
   }, HOVER_SETTLE_MS);
+}
+function onPointerMove(e) {
+  if (isMobile) return;
+  lastPointerX = e.clientX; lastPointerY = e.clientY;
+  if (!pointerRafQueued) { pointerRafQueued = true; requestAnimationFrame(processPointer); }
 }
 function setActive(card) {
   if (card === activeCard) return;
@@ -394,12 +409,15 @@ function initMobile() {
   requestAnimationFrame(mobileTick);
 }
 
-function initParallax() {
-  window.addEventListener("mousemove", (e) => {
-    const px = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2);
-    const py = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
-    gsap.to(gallery, { rotationX: TILT + py * PARALLAX, rotationY: -px * PARALLAX, duration: 1, ease: "power2.out", overwrite: "auto" });
-  });
+// Folded into the same per-frame callback as processPointer() (see
+// onPointerMove) rather than its own raw "mousemove" listener -- two
+// separate listeners each reacting to every single mouse-move event was
+// exactly the kind of redundant per-pixel work that was starving video
+// loading during real (continuous, high-frequency) mouse movement.
+function applyParallax(x, y) {
+  const px = (x - window.innerWidth / 2) / (window.innerWidth / 2);
+  const py = (y - window.innerHeight / 2) / (window.innerHeight / 2);
+  gsap.to(gallery, { rotationX: TILT + py * PARALLAX, rotationY: -px * PARALLAX, duration: 1, ease: "power2.out", overwrite: "auto" });
 }
 
 function initCursor() {
@@ -493,7 +511,7 @@ function init() {
   if (isMobile) {
     initMobile();
   } else {
-    buildLabels(); initParallax(); initScroll(); initCursor();
+    buildLabels(); initScroll(); initCursor();
     scene.addEventListener("pointermove", onPointerMove);
     scene.addEventListener("pointerleave", () => { clearTimeout(pendingHitTimer); pendingHitCard = null; setActive(null); });
   }
