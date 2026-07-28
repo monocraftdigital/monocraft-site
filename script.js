@@ -243,23 +243,19 @@ let pendingHitCard, pendingHitTimer;
 const HOVER_SETTLE_MS = 70;
 function onPointerMove(e) {
   if (isMobile) return;
-  // While a project is active, the enlarged preview box is what's actually
-  // visible on screen over that patch of the ring (it's opaque, z-index:5) --
-  // but the box itself stays pointer-events:none (so the ring underneath is
-  // reachable at rest, before anything is active -- otherwise the whole top
-  // arc, which sits under where the box would be, could never be hovered in
-  // the first place). That means elementFromPoint still resolves to whatever
-  // ring card is geometrically behind the cursor even when hovering visibly
-  // *over* the preview box/sound button, which would tear down and rebuild
-  // the preview out from under the cursor on the way to the button. So: once
-  // a card is active, treat the whole preview box's rect as "stay put" by
-  // comparing raw coordinates instead of relying on elementFromPoint/
-  // pointer-events -- it's inert exactly when there's nothing to protect.
-  if (activeCard) {
-    const r = previewImgWrap.getBoundingClientRect();
-    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return;
-  }
+  // Freezing the WHOLE preview box while a project is active (an earlier
+  // version of this) was wrong: the box is a big 16:9 rectangle sitting over
+  // most of the ring's top arc, so most cards' hitboxes fall inside its
+  // bounds -- freezing that whole area meant switching between projects
+  // stopped working almost everywhere, not just near the sound button. The
+  // sound button is the one actual pointer-events:auto spot inside the
+  // otherwise pass-through box; only bail out for that (deliberately
+  // enlarged) hit zone. A fast, continuous mouse path toward it won't dwell
+  // on any one ring card long enough to trip the debounce below, so this
+  // alone is enough to make the button reachable without also freezing the
+  // rest of the ring.
   const target = document.elementFromPoint(e.clientX, e.clientY);
+  if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
   const card = hit ? hit._card : null;
   if (card === activeCard || card === pendingHitCard) return;
