@@ -313,9 +313,22 @@ function restoreCard(card, duration) {
   // video's download before it ever finished.
   if (card.media.readyState > 0) card.media.currentTime = 0;
 }
+// Removing a <video> from the DOM does NOT stop an in-flight fetch or
+// decode -- the element keeps loading in the background unless explicitly
+// paused and its src cleared first. The preview video gets torn down and
+// recreated on every single hover switch, so without this, browsing across
+// many cards leaves a trail of orphaned videos still competing for network/
+// decode resources, which can eventually starve out newer requests (most
+// videos silently never rendering a frame).
+function stopMedia(v) {
+  if (!v) return;
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+}
 function setPreview(card) {
   const oldVideo = previewImgWrap.querySelector("video");
-  if (oldVideo) oldVideo.remove();
+  if (oldVideo) { stopMedia(oldVideo); oldVideo.remove(); }
   const media = createMedia(card.asset, { autoplay: true });
   previewImgWrap.prepend(media);
   previewCat.textContent = card.project.category; previewTitle.textContent = card.project.title;
@@ -328,9 +341,8 @@ function setPreview(card) {
 // doesn't stop playback -- without this the previous project's audio would
 // keep playing, inaudible-but-invisible, after the cursor leaves the ring.
 function clearPreview() {
-  if (activePreviewMedia) activePreviewMedia.pause();
   const oldVideo = previewImgWrap.querySelector("video");
-  if (oldVideo) oldVideo.remove();
+  if (oldVideo) { stopMedia(oldVideo); oldVideo.remove(); }
   activePreviewMedia = null;
   setPreviewSoundState(false);
 }
@@ -350,7 +362,7 @@ function updateMobileSelection() {
 function updateMobilePreview(card) {
   mpCat.textContent = card.project.category; mpTitle.textContent = card.project.title;
   const oldVideo = mpImgWrap.querySelector("video");
-  if (oldVideo) oldVideo.remove();
+  if (oldVideo) { stopMedia(oldVideo); oldVideo.remove(); }
   const media = createMedia(card.asset, { autoplay: true });
   mpImgWrap.prepend(media);
   gsap.fromTo(media, { opacity: 0.3 }, { opacity: 1, duration: MOBILE_TRANSITION, overwrite: true });
