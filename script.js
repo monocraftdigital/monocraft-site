@@ -267,7 +267,20 @@ function processPointer() {
   const target = document.elementFromPoint(lastPointerX, lastPointerY);
   if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
-  const card = hit ? hit._card : null;
+  let card = hit ? hit._card : null;
+  // Most of the preview box's screen area is neither a ring card NOR the
+  // sound button (cards sit on the ellipse's edge, not filling the box's
+  // interior) -- so the path to the button crosses "hit nothing" pixels.
+  // Switching TO a genuinely different card anywhere still needs to keep
+  // working (that's the ring-browsing UX), so this only suppresses the
+  // "hit nothing -> close the preview" outcome, and only while the cursor
+  // is still visually over the box a project is actively showing in.
+  if (card === null && activeCard && previewImgWrap) {
+    const r = previewImgWrap.getBoundingClientRect();
+    if (lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom) {
+      card = activeCard;
+    }
+  }
   if (card === activeCard || card === pendingHitCard) return;
   // Debounce by time, not by a single frame. The ring is 150 thin,
   // overlapping 3D-rotated slivers, so elementFromPoint can return a
