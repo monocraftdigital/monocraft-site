@@ -244,14 +244,15 @@ const HOVER_SETTLE_MS = 70;
 function onPointerMove(e) {
   if (isMobile) return;
   const target = document.elementFromPoint(e.clientX, e.clientY);
-  // The center preview box sits visually on top of the ring but is
-  // pointer-events:none everywhere except the sound button, so the ring
-  // underneath still gets treated as "hit" while the cursor crosses it --
-  // without this bail-out, moving toward the sound button reads as hovering
+  // The sound button is the one pointer-events:auto exception inside the
+  // otherwise pass-through preview box (see .sound-toggle in styles.css) --
+  // without this bail-out, moving onto/around the button reads as hovering
   // whatever ring card happens to be geometrically behind that pixel, and
-  // tearing/rebuilding the preview out from under the cursor. Treat being
-  // anywhere over the preview box as "stay on the current selection."
-  if (target && target.closest("#previewImg")) return;
+  // tearing/rebuilding the preview out from under the cursor. This only
+  // covers the button's own (deliberately enlarged) hit area, NOT the whole
+  // preview box, so the ring underneath the rest of the box -- including the
+  // entire top arc -- still gets real hover events.
+  if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
   const card = hit ? hit._card : null;
   if (card === activeCard || card === pendingHitCard) return;
