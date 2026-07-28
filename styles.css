@@ -55,7 +55,7 @@ a{ color:inherit; text-decoration:none; }
 .center-project{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; }
 .center.show-project .center-default{ opacity:0; }
 .center.show-project .center-project{ opacity:1; }
-.preview-img{ position:relative; width:min(820px,64vw); aspect-ratio:16/9; flex-shrink:0; overflow:hidden; background:#e7e6e3; }
+.preview-img{ position:relative; width:min(820px,64vw,calc(var(--ring-radius, 400px) * 1.5)); aspect-ratio:16/9; flex-shrink:0; overflow:hidden; background:#e7e6e3; }
 .preview-img img, .preview-img video{ width:100%; height:100%; object-fit:cover; }
 /* Hit area is deliberately larger than the visible circle (::before) --
    only this corner needs to catch pointer events; pointer-events:auto here

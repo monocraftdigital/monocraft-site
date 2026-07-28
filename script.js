@@ -128,6 +128,14 @@ function computeGeometry() {
   const vw = window.innerWidth, vh = window.innerHeight;
   if (isMobile) { radius = vw * 0.74; }
   else { radius = RING_SCALE * Math.max(300, Math.min(vw * 0.32, vh * 0.55)); }
+  // The center preview box was sized purely off viewport width (min(820px,
+  // 64vw) in CSS), independent of the ring's own size -- the ring's radius
+  // depends on BOTH vw and vh, so on narrower/shorter desktop windows the
+  // box ends up disproportionately larger than the ring, swallowing most of
+  // it visually and leaving too few cards actually reachable outside the
+  // box. Tie the box's width to the ring's actual computed radius instead,
+  // so the ratio between them stays consistent across window sizes.
+  if (!isMobile) document.documentElement.style.setProperty("--ring-radius", radius + "px");
   const localY = radius * Math.cos(TILT * DEG);
   const depthZ = radius * Math.sin(TILT * DEG);
   yOffset = localY * (PERSPECTIVE / (PERSPECTIVE - depthZ));
