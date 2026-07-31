@@ -549,8 +549,7 @@ function initMobile() {
     e.preventDefault();
     mobileTargetScrollX = Math.max(0, Math.min(mobileScrollMax(), mobileTargetScrollX + (e.deltaX || e.deltaY) * 0.6));
   }, { passive: false });
-  layoutMobileStrip();
-  updateMobileSelection();
+  setMobileFilter("AI Films"); // default view on first load, per request
   requestAnimationFrame(mobileTick);
 }
 
