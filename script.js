@@ -79,6 +79,19 @@ const CATEGORIES = [
   { name: "3D Animation" },
   { name: "Animation" },
 ];
+// The marquee/ring labels use plural, expanded display names, but each
+// WORKS entry's own `category` is the shorter singular form actually stored
+// on the card -- this is the map between the two so a label tap can filter
+// against real card data.
+const CATEGORY_MATCH = {
+  "AI Films": "AI Film",
+  "CGI": "CGI",
+  "Commercial Films": "Commercial Film",
+  "Social Media Productions": "Social Media",
+  "Public Service Ads": "Public Service Ad",
+  "3D Animation": "3D Animation",
+  "Animation": "Animation",
+};
 
 const INC = 360 / ITEM_COUNT;
 let radius = 470, yOffset = 0, ringRot = 0, introOffset = 0, introPlaying = false;
@@ -86,6 +99,7 @@ const items = [];
 let activeCard = null;
 const isMobile = window.matchMedia(MOBILE_MQ).matches;
 let mobileSelectedCard = null, mobileCurrentScrollX = 0, mobileTargetScrollX = 0;
+let mobileFilter = null; // null = show all; else one of CATEGORIES[].name
 
 const scene = document.querySelector(".scene");
 const gallery = document.getElementById("gallery");
@@ -156,27 +170,45 @@ function computeGeometry() {
   gsap.set(gallery, { x: 0, y: -yOffset });
 }
 
+// When a category is tapped in the marquee, only its cards take part in the
+// strip -- the rest are parked off-screen (still in the DOM, just moved out
+// of view) rather than rebuilt, so nothing about their video elements needs
+// to be torn down. mobileFilter is the display name (CATEGORIES[].name);
+// CATEGORY_MATCH maps it to the shorter string actually stored per-card.
+function mobileVisibleItems() {
+  if (!mobileFilter) return items;
+  const match = CATEGORY_MATCH[mobileFilter];
+  return items.filter((c) => c.project.category === match);
+}
+
 // Mobile: cards sit in index order along a single horizontal line, centered
 // vertically in the strip's viewport. mobileCurrentScrollX is "how far
-// scrolled" in pixels (0 = card 0 centered); dragging moves it, inertia
-// carries it, and it's clamped so you can't drag past the first/last card.
+// scrolled" in pixels (0 = first visible card flush left); dragging moves
+// it, inertia carries it, and it's clamped so you can't drag past the
+// first/last visible card.
 function layoutMobileStrip() {
   if (!isMobile) return;
   const rect = gallery.getBoundingClientRect();
   const stripH = rect.height || MOBILE_CARD_H + 88;
   const centerY = (stripH - MOBILE_CARD_H) / 2;
-  for (const card of items) {
-    gsap.set(card.el, { x: card.index * MOBILE_STEP - mobileCurrentScrollX, y: centerY, rotationZ: 0 });
+  const visible = mobileVisibleItems();
+  const visibleSet = new Set(visible);
+  visible.forEach((card, i) => {
+    gsap.set(card.el, { x: i * MOBILE_STEP - mobileCurrentScrollX, y: centerY, rotationZ: 0 });
     gsap.set(card.cardEl, { rotationY: 0, opacity: 1 });
+  });
+  for (const card of items) {
+    if (!visibleSet.has(card)) gsap.set(card.el, { x: -9999, y: -9999 });
   }
 }
-// How far the strip can scroll: from "card 0 flush at the window's left
-// edge" to "the last card flush at the window's right edge" -- depends on
-// the window's actual on-screen width, so it's computed fresh, not a
-// constant (though in practice it's always MOBILE_VISIBLE_W).
+// How far the strip can scroll: from "first visible card flush at the
+// window's left edge" to "last visible card flush at the window's right
+// edge" -- depends on the window's actual width and how many cards are
+// currently visible (filtered or not), so it's computed fresh.
 function mobileScrollMax() {
   const stripW = gallery.getBoundingClientRect().width || MOBILE_VISIBLE_W;
-  return Math.max(0, (ITEM_COUNT - 1) * MOBILE_STEP + MOBILE_CARD_W - stripW);
+  const count = mobileVisibleItems().length;
+  return Math.max(0, (count - 1) * MOBILE_STEP + MOBILE_CARD_W - stripW);
 }
 
 function angleOf(card) { return card.index * INC - 90 + ringRot + introOffset; }
@@ -314,11 +346,21 @@ function processPointer() {
   // working (that's the ring-browsing UX), so this only suppresses the
   // "hit nothing -> close the preview" outcome, and only while the cursor
   // is still visually over the box a project is actively showing in.
-  if (card === null && activeCard && previewImgWrap) {
+  if (activeCard && previewImgWrap) {
     const r = previewImgWrap.getBoundingClientRect();
-    if (lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom) {
-      card = activeCard;
-    }
+    const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
+    // A handful of ring cards happen to sit geometrically along the path
+    // from wherever the cursor enters the box to the sound button's bottom-
+    // right corner -- hitting one of those (a REAL card, not empty space)
+    // used to read as "switch to this card", which tore the preview down
+    // mid-approach. Treat that whole corner as part of the button's
+    // protected zone, same as the "hit nothing" case below: small enough
+    // not to swallow general ring-browsing elsewhere in the box (that's
+    // exactly the mistake an earlier version made by protecting the WHOLE
+    // box), but big enough to cover a realistic approach path.
+    const CORNER = 130;
+    const inCorner = insideBox && lastPointerX >= r.right - CORNER && lastPointerY >= r.bottom - CORNER;
+    if (inCorner || (card === null && insideBox)) card = activeCard;
   }
   if (card === activeCard || card === pendingHitCard) return;
   // Debounce by time, not by a single frame. The ring is 150 thin,
@@ -416,9 +458,11 @@ function clearPreview() {
 // resolves it to the right-hand one. Nothing hinges on index 0 specifically
 // being the initial highlight.
 function nearestMobileCard() {
+  const visible = mobileVisibleItems();
+  if (!visible.length) return null;
   const stripW = gallery.getBoundingClientRect().width || MOBILE_VISIBLE_W;
   const idx = Math.round((mobileCurrentScrollX - MOBILE_CARD_W / 2 + stripW / 2) / MOBILE_STEP);
-  return items[Math.max(0, Math.min(ITEM_COUNT - 1, idx))];
+  return visible[Math.max(0, Math.min(visible.length - 1, idx))];
 }
 // Flat cards don't get the desktop pullOut()'s 3D translate (that math is
 // built entirely around the ring's circular geometry) -- selection here is
@@ -439,7 +483,8 @@ function updateMobileSelection() {
   const card = nearestMobileCard();
   if (card === mobileSelectedCard) return;
   if (mobileSelectedCard) mobileUnhighlight(mobileSelectedCard);
-  mobileSelectedCard = card; mobileHighlight(card); updateMobilePreview(card);
+  mobileSelectedCard = card;
+  if (card) { mobileHighlight(card); updateMobilePreview(card); }
 }
 function updateMobilePreview(card) {
   mpCat.textContent = card.project.category; mpTitle.textContent = card.project.title;
@@ -566,8 +611,28 @@ function buildLabels() {
 function buildMobileMarquee() {
   const track = document.getElementById("mmTrack");
   if (!track) return;
-  const text = CATEGORIES.map((c) => c.name).join(" • ") + " • ";
-  track.innerHTML = `<span>${text}</span><span>${text}</span>`;
+  const half = CATEGORIES.map((c) => `<button type="button" class="mm-item" data-cat="${c.name}">${c.name}</button>`)
+    .join('<span class="mm-sep"> • </span>') + '<span class="mm-sep"> • </span>';
+  track.innerHTML = half + half; // two copies back to back for the seamless loop (see @keyframes mm-scroll)
+  track.addEventListener("click", (e) => {
+    const btn = e.target.closest(".mm-item");
+    if (!btn) return;
+    setMobileFilter(mobileFilter === btn.dataset.cat ? null : btn.dataset.cat);
+  });
+}
+
+// Tapping a category in the marquee narrows the strip to just that
+// category's cards (tapping the same one again clears it back to all) --
+// the strip's own layout/scroll-bounds/selection logic all read from
+// mobileVisibleItems(), so this only needs to update the filter and reset
+// scroll position; layoutMobileStrip() handles parking the rest off-screen.
+function setMobileFilter(cat) {
+  mobileFilter = cat;
+  document.querySelectorAll(".mm-item").forEach((el) => el.classList.toggle("is-active", el.dataset.cat === cat));
+  if (mobileSelectedCard) { mobileUnhighlight(mobileSelectedCard); mobileSelectedCard = null; }
+  mobileCurrentScrollX = mobileTargetScrollX = 0;
+  layoutMobileStrip();
+  updateMobileSelection();
 }
 
 function initLoader() {
