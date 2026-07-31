@@ -34,10 +34,10 @@ const WORKS = [
   { src: "https://videos.monocraftdigital.com/public/divan-cukurhan-social-media.mp4", title: "Divan Çukurhan", category: "Social Media" },
   { src: "https://videos.monocraftdigital.com/public/jw-marriott-ankara-commercial-film.mp4", title: "JW Marriott Ankara", category: "Commercial Film" },
   { src: "https://videos.monocraftdigital.com/public/jw-marriott-ankara-social-media.mp4", title: "JW Marriott Ankara", category: "Social Media" },
-  { src: "https://videos.monocraftdigital.com/public/kuzu-effect-3d-animation.mp4", title: "Kuzu Effect", category: "3D Animation" },
+  { src: "https://videos.monocraftdigital.com/public/kuzu-effect-3d-animation.mp4", title: "Kuzu Effect", category: "Animation" },
   { src: "https://videos.monocraftdigital.com/public/luigis-social-media.mp4", title: "Luigis", category: "Social Media" },
   { src: "https://videos.monocraftdigital.com/public/luigis-social-media-2.mp4", title: "Luigis", category: "Social Media" },
-  { src: "https://videos.monocraftdigital.com/public/mad-parfumeur-cgi.mp4", title: "MAD Parfumeur", category: "CGI" },
+  { src: "https://videos.monocraftdigital.com/public/mad-parfumeur-cgi.mp4", title: "MAD Parfumeur", category: "Commercial Film" },
   { src: "https://videos.monocraftdigital.com/public/mad-parfumeur-commercial-film.mp4", title: "MAD Parfumeur", category: "Commercial Film" },
   { src: "https://videos.monocraftdigital.com/public/mad-parfumeur-commercial-film-2.mp4", title: "MAD Parfumeur", category: "Commercial Film" },
   { src: "https://videos.monocraftdigital.com/public/matmazel-commercial-film.mp4", title: "Matmazel", category: "Commercial Film" },
@@ -72,11 +72,9 @@ const WORKS = [
 
 const CATEGORIES = [
   { name: "AI Films" },
-  { name: "CGI" },
   { name: "Commercial Films" },
   { name: "Social Media Productions" },
   { name: "Public Service Ads" },
-  { name: "3D Animation" },
   { name: "Animation" },
 ];
 // The marquee/ring labels use plural, expanded display names, but each
@@ -85,11 +83,9 @@ const CATEGORIES = [
 // against real card data.
 const CATEGORY_MATCH = {
   "AI Films": "AI Film",
-  "CGI": "CGI",
   "Commercial Films": "Commercial Film",
   "Social Media Productions": "Social Media",
   "Public Service Ads": "Public Service Ad",
-  "3D Animation": "3D Animation",
   "Animation": "Animation",
 };
 
