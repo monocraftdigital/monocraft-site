@@ -97,6 +97,12 @@ const INC = 360 / ITEM_COUNT;
 let radius = 470, yOffset = 0, ringRot = 0, introOffset = 0, introPlaying = false;
 const items = [];
 let activeCard = null;
+// Clicking a ring card "pins" it: the center preview locks to that card and
+// stops following hover entirely, so there's no longer any path by which
+// moving the cursor toward the sound button can make the video change or
+// disappear. Click the pinned card again to release it back to normal
+// hover-follows-preview browsing.
+let pinnedCard = null;
 const isMobile = window.matchMedia(MOBILE_MQ).matches;
 let mobileSelectedCard = null, mobileCurrentScrollX = 0, mobileTargetScrollX = 0;
 let mobileFilter = null; // null = show all; else one of CATEGORIES[].name
@@ -339,25 +345,25 @@ function processPointer() {
   if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
   let card = hit ? hit._card : null;
-  // Most of the preview box's screen area is neither a ring card NOR the
-  // sound button (cards sit on the ellipse's edge, not filling the box's
-  // interior) -- so the path to the button crosses "hit nothing" pixels.
-  // Switching TO a genuinely different card anywhere still needs to keep
-  // working (that's the ring-browsing UX), so this only suppresses the
-  // "hit nothing -> close the preview" outcome, and only while the cursor
-  // is still visually over the box a project is actively showing in.
-  if (activeCard && previewImgWrap) {
+  if (pinnedCard && previewImgWrap) {
+    // Clicking a card pins it (see onRingClick) -- an explicit, deliberate
+    // signal that's worth trusting completely, unlike a hover that merely
+    // happens to pass over a card. Every card whose hitbox falls inside the
+    // preview box's screen rect is visually hidden behind the (opaque)
+    // preview anyway, so the user can't be intentionally aiming for one --
+    // safe to protect the WHOLE box once pinned, not just a guessed corner.
+    // A genuinely different, VISIBLE card outside the box still switches
+    // normally below (and releases the pin -- see setActive).
     const r = previewImgWrap.getBoundingClientRect();
     const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
-    // A handful of ring cards happen to sit geometrically along the path
-    // from wherever the cursor enters the box to the sound button's bottom-
-    // right corner -- hitting one of those (a REAL card, not empty space)
-    // used to read as "switch to this card", which tore the preview down
-    // mid-approach. Treat that whole corner as part of the button's
-    // protected zone, same as the "hit nothing" case below: small enough
-    // not to swallow general ring-browsing elsewhere in the box (that's
-    // exactly the mistake an earlier version made by protecting the WHOLE
-    // box), but big enough to cover a realistic approach path.
+    if (insideBox) card = pinnedCard;
+  } else if (activeCard && previewImgWrap) {
+    // Unpinned (no click yet this session): lighter, best-effort protection
+    // for casual hover-only use -- just the "hit nothing" case and a corner
+    // near the button, not the whole box (that broke general ring-browsing
+    // when nothing has been pinned -- see the git history on this block).
+    const r = previewImgWrap.getBoundingClientRect();
+    const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
     const CORNER = 130;
     const inCorner = insideBox && lastPointerX >= r.right - CORNER && lastPointerY >= r.bottom - CORNER;
     if (inCorner || (card === null && insideBox)) card = activeCard;
@@ -387,7 +393,28 @@ function setActive(card) {
   if (card === activeCard) return;
   const prev = activeCard; activeCard = card;
   if (prev) restoreCard(prev);
-  if (card) { pullOut(card); setPreview(card); } else { clearPreview(); center.classList.remove("show-project"); }
+  // Reaching here with a card other than the pinned one only happens via a
+  // genuinely different, visible ring card (processPointer already forces
+  // pinned-card protection for anything inside the preview box) -- that's
+  // the user deliberately browsing away, so the old pin is released rather
+  // than fighting the switch they're asking for.
+  if (pinnedCard && card && card !== pinnedCard) pinnedCard = null;
+  if (card) { pullOut(card); setPreview(card); } else if (!pinnedCard) { clearPreview(); center.classList.remove("show-project"); }
+}
+
+// A click on a ring card pins it -- see the pinnedCard comment above and
+// the protection logic in processPointer(). Clicking the already-pinned
+// card again releases it (does nothing else; it's already showing).
+function onRingClick(e) {
+  if (isMobile) return;
+  const target = document.elementFromPoint(e.clientX, e.clientY);
+  if (target && target.closest(".sound-toggle")) return; // let the button's own click handler run
+  const hit = target && target.closest(".item");
+  const card = hit ? hit._card : null;
+  if (!card) return;
+  if (pinnedCard === card) { pinnedCard = null; return; }
+  pinnedCard = card;
+  if (card !== activeCard) setActive(card);
 }
 
 function pullOut(card, opts) {
@@ -698,6 +725,7 @@ function init() {
     buildLabels(); initScroll(); initCursor();
     scene.addEventListener("pointermove", onPointerMove);
     scene.addEventListener("pointerleave", () => { clearTimeout(pendingHitTimer); pendingHitCard = null; setActive(null); });
+    scene.addEventListener("click", onRingClick);
   }
   requestAnimationFrame(onResize);
   setTimeout(onResize, 300);
