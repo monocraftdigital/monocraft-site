@@ -24,9 +24,6 @@ a{ color:inherit; text-decoration:none; }
 .nav a.is-active::after{ content:""; position:absolute; left:0; bottom:-6px; width:100%; height:1px; background:var(--ink); }
 .social-link{ display:flex; align-items:center; justify-content:center; color:var(--ink); opacity:0.75; transition:opacity .3s ease; }
 .social-link:hover{ opacity:1; }
-.menu-toggle{ display:none; flex-direction:column; justify-content:center; gap:5px; width:26px; height:18px;
-  padding:0; background:none; border:none; cursor:pointer; }
-.menu-toggle span{ display:block; width:100%; height:1.5px; background:var(--ink); }
 
 .corner{ position:fixed; bottom:2.2em; z-index:50; font-style:normal;
   font-family:var(--font); font-size:13px; font-weight:500; letter-spacing:0.02em; color:var(--ink);
@@ -88,22 +85,16 @@ a{ color:inherit; text-decoration:none; }
 
 .mobile-preview{ display:none; }
 .mobile-ring-hitbox{ display:none; }
+.mobile-marquee{ display:none; }
 
 @media (max-width:768px){
-  .mobile-ring-hitbox{ display:block; position:fixed; left:0; right:0; bottom:0; top:50%;
-    z-index:20; touch-action:none; pointer-events:auto; }
   body{ height:auto; }
-  .scene{ height:100svh; overflow:hidden; }
-  .center, .labels{ display:none; }
   .custom-cursor{ display:none !important; }
   .site-header{ padding:1.15em 1em; align-items:center; }
   .nav{ display:none; }
-  .menu-toggle{ display:flex; }
   .brand-logo{ height:38px; }
-  .corner{ bottom:auto; top:3.6em; font-size:12px; }
-  .corner--left{ left:1em; }
-  .corner--right{ right:1em; }
-  .mobile-preview{ display:block; position:fixed; top:6.2em; left:0; right:0; z-index:6; padding:0 1em; pointer-events:none; }
+
+  .mobile-preview{ display:block; position:static; margin-top:5.6em; padding:0 1.1em; pointer-events:auto; }
   .mp-caption{ font-size:16px; letter-spacing:-0.005em; margin-bottom:14px; }
   .mp-title{ font-weight:700; }
   .mp-sep{ color:var(--muted); }
@@ -115,7 +106,38 @@ a{ color:inherit; text-decoration:none; }
   .mp-view{ display:inline-block; margin-top:11px; font-size:14px; font-weight:700;
     border-bottom:1px solid var(--ink); padding-bottom:2px; pointer-events:auto; }
   .mp-view i{ font-style:normal; margin-left:0.35em; }
+
+  /* The ring becomes a flat, horizontally-draggable strip instead of the
+     circular illusion -- on a narrow phone the circle was mostly off-screen
+     to the right, showing only a half-open vertical sliver on the left.
+     Normal document flow now (not a fixed full-viewport layer), so the page
+     is only as tall as its real content, leaving room for the footer. */
+  .scene{ position:relative; inset:auto; height:auto; overflow:visible; perspective:none; }
+  .center, .labels{ display:none; }
+  /* Exactly two cards wide (2*132 + 14 gap -- keep in sync with
+     MOBILE_VISIBLE_W in script.js), centered under the preview above, so
+     precisely two whole cards ever show -- never a peeked-at third. */
+  .gallery{ position:relative; top:auto; left:auto; width:278px; margin:0 auto; height:190px; overflow:hidden; }
+  .mobile-ring-hitbox{ display:block; position:absolute; inset:0; z-index:5; touch-action:pan-y; pointer-events:auto; }
+  .item{ width:132px; height:96px; }
+  .item-card{ border-radius:3px; }
+  /* Decorative only -- a quiet hint that the strip scrolls, not a control. */
+  .strip-arrow{ display:block; position:absolute; top:50%; transform:translateY(-50%);
+    color:var(--ink); opacity:0.38; pointer-events:none; z-index:1; }
+  .strip-arrow--left{ left:0; }
+  .strip-arrow--right{ right:0; }
+
+  .mobile-marquee{ display:block; overflow:hidden; margin-top:0.6em; margin-bottom:1.8em; padding:0.9em 0; white-space:nowrap; }
+  .mm-track{ display:inline-flex; width:max-content; animation:mm-scroll 22s linear infinite; }
+  .mm-track span{ display:inline-block; font-size:12.5px; font-weight:500; letter-spacing:0.02em; color:var(--muted); }
+  @media (prefers-reduced-motion:reduce){ .mm-track{ animation:none; } }
+
+  .mobile-footer{ display:flex; flex-direction:row; justify-content:space-between; align-items:flex-start;
+    padding:1.2em 1.4em 3em; margin-top:0; border-top:1px solid var(--line); }
+  .mobile-footer .corner{ position:static; font-size:11.5px; }
 }
+
+@keyframes mm-scroll{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
 
 .custom-cursor{ display:none; }
 @media (pointer:fine) and (hover:hover){

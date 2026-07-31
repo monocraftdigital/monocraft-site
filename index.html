@@ -31,21 +31,26 @@
             <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none" />
           </svg>
         </a>
-        <button class="menu-toggle" type="button" aria-label="Menu"><span></span><span></span></button>
       </div>
     </header>
 
-    <address class="corner corner--left">
-      <a href="mailto:info@mineralmineral.com">info@mineralmineral.com</a>
-      <a href="tel:+903124402009">+90 312 4402009</a>
-    </address>
-    <address class="corner corner--right">
-      <span>Güvenevler Mh. Güneş Sk. 4/3</span>
-      <span>Çankaya, Ankara / Turkey</span>
-    </address>
+    <div class="mobile-preview" id="mobilePreview">
+      <p class="mp-caption"><span class="mp-title" id="mpTitle">Untitled</span><span class="mp-sep"> • </span><span class="mp-cat" id="mpCat">Category</span></p>
+      <div class="mp-img" id="mpImg">
+        <button class="sound-toggle" id="mpSound" type="button" aria-label="Toggle sound" aria-pressed="false">
+          <svg class="icon-muted" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><line x1="16" y1="9" x2="21" y2="15"/><line x1="21" y1="9" x2="16" y2="15"/></svg>
+          <svg class="icon-unmuted" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.3 8.5a5 5 0 0 1 0 7"/><path d="M18.9 6a8.5 8.5 0 0 1 0 12"/></svg>
+        </button>
+      </div>
+      <a class="mp-view" href="#">View project <i>+</i></a>
+    </div>
 
     <div class="scene">
       <div class="gallery" id="gallery"></div>
+      <div class="mobile-ring-hitbox" id="ringHitbox">
+        <svg class="strip-arrow strip-arrow--left" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18" /></svg>
+        <svg class="strip-arrow strip-arrow--right" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18" /></svg>
+      </div>
       <div class="center" id="center">
         <div class="center-default" id="centerDefault">
           <p class="center-line-bold">We are studio</p>
@@ -64,18 +69,19 @@
       <div class="labels" id="labels"></div>
     </div>
 
-    <div class="mobile-preview" id="mobilePreview">
-      <p class="mp-caption"><span class="mp-title" id="mpTitle">Untitled</span><span class="mp-sep"> • </span><span class="mp-cat" id="mpCat">Category</span></p>
-      <div class="mp-img" id="mpImg">
-        <button class="sound-toggle" id="mpSound" type="button" aria-label="Toggle sound" aria-pressed="false">
-          <svg class="icon-muted" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><line x1="16" y1="9" x2="21" y2="15"/><line x1="21" y1="9" x2="16" y2="15"/></svg>
-          <svg class="icon-unmuted" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.3 8.5a5 5 0 0 1 0 7"/><path d="M18.9 6a8.5 8.5 0 0 1 0 12"/></svg>
-        </button>
-      </div>
-      <a class="mp-view" href="#">View project <i>+</i></a>
+    <div class="mobile-marquee" id="mobileMarquee"><div class="mm-track" id="mmTrack"></div></div>
+
+    <div class="mobile-footer">
+      <address class="corner corner--left">
+        <a href="mailto:info@mineralmineral.com">info@mineralmineral.com</a>
+        <a href="tel:+903124402009">+90 312 4402009</a>
+      </address>
+      <address class="corner corner--right">
+        <span>Güvenevler Mh. Güneş Sk. 4/3</span>
+        <span>Çankaya, Ankara / Turkey</span>
+      </address>
     </div>
 
-    <div class="mobile-ring-hitbox" id="ringHitbox"></div>
     <div class="custom-cursor" id="cursor"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>

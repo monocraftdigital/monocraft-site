@@ -10,8 +10,19 @@ const RING_SCALE = 0.88;
 const PARALLAX = 4;
 const HOVER_OUT = 16, HOVER_Z = 12, HOVER_SCALE = 1.02, HOVER_DURATION = 0.32;
 const MOBILE_MQ = "(max-width: 768px)";
-const MOBILE_SELECTED_OUT = 8, MOBILE_SELECTED_Z = 2, MOBILE_SELECTED_SCALE = 1.005;
-const MOBILE_TRANSITION = 0.25, MOBILE_FOCUS_ANGLE = -35, MOBILE_DRAG_SPEED = 0.35;
+// Mobile is a flat, horizontally-draggable strip (not the circular ring --
+// see layoutMobileStrip()), so its sizing is linear pixels, not angles.
+// Keep MOBILE_CARD_W/H in sync with .item's mobile override in styles.css.
+const MOBILE_CARD_W = 132, MOBILE_CARD_H = 96, MOBILE_CARD_GAP = 14;
+const MOBILE_STEP = MOBILE_CARD_W + MOBILE_CARD_GAP;
+// The strip's visible window is exactly two cards wide (see .gallery's
+// mobile width in styles.css, kept in sync with this) -- not the full
+// viewport -- so exactly two whole cards ever show, centered under the big
+// preview above, with the arrow hints sitting in open background on
+// either side rather than crowding a peeked-at third card.
+const MOBILE_VISIBLE_W = MOBILE_CARD_W * 2 + MOBILE_CARD_GAP;
+const MOBILE_SELECTED_SCALE = 1.14;
+const MOBILE_TRANSITION = 0.25, MOBILE_DRAG_SPEED = 1;
 
 // Each entry pairs a real file with its own correct title/category so a
 // card's label always matches what's actually playing on it, regardless of
@@ -74,7 +85,7 @@ let radius = 470, yOffset = 0, ringRot = 0, introOffset = 0, introPlaying = fals
 const items = [];
 let activeCard = null;
 const isMobile = window.matchMedia(MOBILE_MQ).matches;
-let mobileSelectedCard = null, mobileCurrentRotation = 0, mobileTargetRotation = 0;
+let mobileSelectedCard = null, mobileCurrentScrollX = 0, mobileTargetScrollX = 0;
 
 const scene = document.querySelector(".scene");
 const gallery = document.getElementById("gallery");
@@ -124,10 +135,13 @@ if (mpSoundBtn) {
   });
 }
 
+// Desktop-only: the circular ring's geometry. Mobile lays cards out in a
+// flat horizontal strip instead (see layoutMobileStrip()) -- entirely
+// different math, so it doesn't share this function.
 function computeGeometry() {
+  if (isMobile) return;
   const vw = window.innerWidth, vh = window.innerHeight;
-  if (isMobile) { radius = vw * 0.74; }
-  else { radius = RING_SCALE * Math.max(300, Math.min(vw * 0.32, vh * 0.55)); }
+  radius = RING_SCALE * Math.max(300, Math.min(vw * 0.32, vh * 0.55));
   // The center preview box was sized purely off viewport width (min(820px,
   // 64vw) in CSS), independent of the ring's own size -- the ring's radius
   // depends on BOTH vw and vh, so on narrower/shorter desktop windows the
@@ -135,25 +149,41 @@ function computeGeometry() {
   // it visually and leaving too few cards actually reachable outside the
   // box. Tie the box's width to the ring's actual computed radius instead,
   // so the ratio between them stays consistent across window sizes.
-  if (!isMobile) document.documentElement.style.setProperty("--ring-radius", radius + "px");
+  document.documentElement.style.setProperty("--ring-radius", radius + "px");
   const localY = radius * Math.cos(TILT * DEG);
   const depthZ = radius * Math.sin(TILT * DEG);
   yOffset = localY * (PERSPECTIVE / (PERSPECTIVE - depthZ));
-  if (isMobile) {
-    const pr = mobilePreview.getBoundingClientRect();
-    const archiveTop = (pr.bottom > 0 ? pr.bottom : vh * 0.46) + 26;
-    const ringCenterX = vw * 0.98;
-    gsap.set(gallery, { x: ringCenterX - vw / 2, y: archiveTop - vh / 2 });
-    if (ringHitbox) ringHitbox.style.top = Math.round(archiveTop - 12) + "px";
-  } else {
-    gsap.set(gallery, { x: 0, y: -yOffset });
+  gsap.set(gallery, { x: 0, y: -yOffset });
+}
+
+// Mobile: cards sit in index order along a single horizontal line, centered
+// vertically in the strip's viewport. mobileCurrentScrollX is "how far
+// scrolled" in pixels (0 = card 0 centered); dragging moves it, inertia
+// carries it, and it's clamped so you can't drag past the first/last card.
+function layoutMobileStrip() {
+  if (!isMobile) return;
+  const rect = gallery.getBoundingClientRect();
+  const stripH = rect.height || MOBILE_CARD_H + 88;
+  const centerY = (stripH - MOBILE_CARD_H) / 2;
+  for (const card of items) {
+    gsap.set(card.el, { x: card.index * MOBILE_STEP - mobileCurrentScrollX, y: centerY, rotationZ: 0 });
+    gsap.set(card.cardEl, { rotationY: 0, opacity: 1 });
   }
+}
+// How far the strip can scroll: from "card 0 flush at the window's left
+// edge" to "the last card flush at the window's right edge" -- depends on
+// the window's actual on-screen width, so it's computed fresh, not a
+// constant (though in practice it's always MOBILE_VISIBLE_W).
+function mobileScrollMax() {
+  const stripW = gallery.getBoundingClientRect().width || MOBILE_VISIBLE_W;
+  return Math.max(0, (ITEM_COUNT - 1) * MOBILE_STEP + MOBILE_CARD_W - stripW);
 }
 
 function angleOf(card) { return card.index * INC - 90 + ringRot + introOffset; }
 function depthOpacity(rotZdeg) { const back = Math.cos(rotZdeg * DEG); return 1 - (back + 1) * 0.25; }
 
 function updateRing() {
+  if (isMobile) return;
   for (const card of items) {
     const rotZ = angleOf(card); card.depth = depthOpacity(rotZ);
     gsap.set(card.el, { rotationZ: rotZ }); gsap.set(card.cardEl, { opacity: card.depth });
@@ -241,6 +271,7 @@ function ensureVideoSource(card) {
 }
 
 function setupItems() {
+  if (isMobile) return;
   for (const card of items) {
     gsap.set(card.el, { xPercent: -50, yPercent: -50, transformOrigin: `50% ${radius}px`, rotationZ: angleOf(card) });
     gsap.set(card.cardEl, { rotationY: ROT_Y, x: 0, y: 0, z: 0, scale: 1, opacity: card.depth });
@@ -379,17 +410,36 @@ function clearPreview() {
   setPreviewSoundState(false);
 }
 
-const MOBILE_OPTS = { out: MOBILE_SELECTED_OUT, z: MOBILE_SELECTED_Z, scale: MOBILE_SELECTED_SCALE, duration: MOBILE_TRANSITION };
+// "Selected" is whichever of the two visible cards is nearest the window's
+// own center -- with exactly two cards filling it, that's a dead-even tie
+// at rest (both equidistant), and Math.round's up-on-.5 behavior always
+// resolves it to the right-hand one. Nothing hinges on index 0 specifically
+// being the initial highlight.
 function nearestMobileCard() {
-  let idx = Math.round((MOBILE_FOCUS_ANGLE + 90 - ringRot) / INC);
-  idx = ((idx % ITEM_COUNT) + ITEM_COUNT) % ITEM_COUNT; return items[idx];
+  const stripW = gallery.getBoundingClientRect().width || MOBILE_VISIBLE_W;
+  const idx = Math.round((mobileCurrentScrollX - MOBILE_CARD_W / 2 + stripW / 2) / MOBILE_STEP);
+  return items[Math.max(0, Math.min(ITEM_COUNT - 1, idx))];
+}
+// Flat cards don't get the desktop pullOut()'s 3D translate (that math is
+// built entirely around the ring's circular geometry) -- selection here is
+// just "grow slightly + play", the same idea, simpler shape.
+function mobileHighlight(card) {
+  card.cardEl.classList.add("is-active");
+  gsap.to(card.cardEl, { scale: MOBILE_SELECTED_SCALE, duration: MOBILE_TRANSITION, ease: "power2.out", overwrite: true });
+  ensureVideoSource(card);
+  attemptPlay(card.media);
+}
+function mobileUnhighlight(card) {
+  card.cardEl.classList.remove("is-active");
+  gsap.to(card.cardEl, { scale: 1, duration: MOBILE_TRANSITION, ease: "power2.out", overwrite: true });
+  card.media.pause();
+  if (card.media.readyState > 0) card.media.currentTime = 0;
 }
 function updateMobileSelection() {
-  if (introPlaying) return;
   const card = nearestMobileCard();
   if (card === mobileSelectedCard) return;
-  if (mobileSelectedCard) restoreCard(mobileSelectedCard, MOBILE_TRANSITION);
-  mobileSelectedCard = card; pullOut(card, MOBILE_OPTS); updateMobilePreview(card);
+  if (mobileSelectedCard) mobileUnhighlight(mobileSelectedCard);
+  mobileSelectedCard = card; mobileHighlight(card); updateMobilePreview(card);
 }
 function updateMobilePreview(card) {
   mpCat.textContent = card.project.category; mpTitle.textContent = card.project.title;
@@ -404,28 +454,57 @@ function updateMobilePreview(card) {
 
 let mobileDragging = false, mobileVelocity = 0;
 function mobileTick() {
-  if (!mobileDragging) { mobileTargetRotation += mobileVelocity; mobileVelocity *= 0.92; if (Math.abs(mobileVelocity) < 0.01) mobileVelocity = 0; }
-  mobileCurrentRotation += (mobileTargetRotation - mobileCurrentRotation) * 0.16;
-  ringRot = mobileCurrentRotation; updateRing(); updateMobileSelection();
+  if (!mobileDragging) {
+    mobileTargetScrollX += mobileVelocity;
+    mobileVelocity *= 0.92;
+    if (Math.abs(mobileVelocity) < 0.02) mobileVelocity = 0;
+  }
+  mobileTargetScrollX = Math.max(0, Math.min(mobileScrollMax(), mobileTargetScrollX));
+  mobileCurrentScrollX += (mobileTargetScrollX - mobileCurrentScrollX) * 0.18;
+  layoutMobileStrip(); updateMobileSelection();
   requestAnimationFrame(mobileTick);
 }
 function initMobile() {
-  mobileCurrentRotation = mobileTargetRotation = ringRot;
-  let lastX = 0, lastY = 0;
+  mobileCurrentScrollX = mobileTargetScrollX = 0;
+  // The strip lives in a normally-scrolling page now (not a fixed
+  // full-screen layer), so a vertical drag on it needs to fall through to
+  // the page's own scroll instead of being eaten by the carousel.
+  // touch-action:pan-y (see .mobile-ring-hitbox) lets the browser handle
+  // vertical panning by default; this only steals the gesture for the
+  // strip once it's clearly horizontal (past a small threshold), and
+  // otherwise never calls preventDefault, so a vertical swipe scrolls the
+  // page exactly like it would anywhere else.
+  let startX = 0, startY = 0, lastX = 0, dragAxis = null;
+  const AXIS_THRESHOLD = 6;
   ringHitbox.addEventListener("pointerdown", (e) => {
-    mobileDragging = true; mobileVelocity = 0; lastX = e.clientX; lastY = e.clientY;
-    try { ringHitbox.setPointerCapture(e.pointerId); } catch (_) {}
+    mobileDragging = true; mobileVelocity = 0; dragAxis = null;
+    startX = lastX = e.clientX; startY = e.clientY;
   });
   ringHitbox.addEventListener("pointermove", (e) => {
-    if (!mobileDragging) return; e.preventDefault();
-    const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY;
-    const delta = dx * MOBILE_DRAG_SPEED + dy * 0.12; mobileTargetRotation += delta; mobileVelocity = delta;
+    if (!mobileDragging) return;
+    if (dragAxis === null) {
+      const totalX = e.clientX - startX, totalY = e.clientY - startY;
+      if (Math.abs(totalX) > AXIS_THRESHOLD || Math.abs(totalY) > AXIS_THRESHOLD) {
+        dragAxis = Math.abs(totalX) > Math.abs(totalY) ? "x" : "y";
+        if (dragAxis === "x") { try { ringHitbox.setPointerCapture(e.pointerId); } catch (_) {} }
+        else { mobileDragging = false; return; }
+      }
+    }
+    if (dragAxis !== "x") return;
+    e.preventDefault();
+    const dx = e.clientX - lastX; lastX = e.clientX;
+    mobileTargetScrollX = Math.max(0, Math.min(mobileScrollMax(), mobileTargetScrollX - dx * MOBILE_DRAG_SPEED));
+    mobileVelocity = -dx * MOBILE_DRAG_SPEED;
   });
-  const endDrag = (e) => { if (!mobileDragging) return; mobileDragging = false;
+  const endDrag = (e) => { if (!mobileDragging) return; mobileDragging = false; dragAxis = null;
     try { if (ringHitbox.hasPointerCapture(e.pointerId)) ringHitbox.releasePointerCapture(e.pointerId); } catch (_) {} };
   ringHitbox.addEventListener("pointerup", endDrag);
   ringHitbox.addEventListener("pointercancel", endDrag);
-  ringHitbox.addEventListener("wheel", (e) => { e.preventDefault(); mobileTargetRotation += e.deltaY * 0.18; }, { passive: false });
+  ringHitbox.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    mobileTargetScrollX = Math.max(0, Math.min(mobileScrollMax(), mobileTargetScrollX + (e.deltaX || e.deltaY) * 0.6));
+  }, { passive: false });
+  layoutMobileStrip();
   updateMobileSelection();
   requestAnimationFrame(mobileTick);
 }
@@ -478,6 +557,19 @@ function buildLabels() {
   });
 }
 
+// Mobile's flat strip has no room for labels floating around a ring, so the
+// same category list runs instead as a continuously auto-scrolling ribbon
+// between the strip and the footer. Two copies of the text back to back,
+// animated -50% (see .mm-track in styles.css), is the standard seamless-
+// marquee trick: the moment the first copy scrolls fully out of view, the
+// second is sitting exactly where the first started.
+function buildMobileMarquee() {
+  const track = document.getElementById("mmTrack");
+  if (!track) return;
+  const text = CATEGORIES.map((c) => c.name).join(" • ") + " • ";
+  track.innerHTML = `<span>${text}</span><span>${text}</span>`;
+}
+
 function initLoader() {
   const overlay = document.getElementById("loadingScreen");
   if (!overlay) return;
@@ -487,7 +579,7 @@ function initLoader() {
   // download. The loader is just the minimum splash time; videos stream in
   // lazily once the ring is on screen (see ensureVideoSource()).
   minLoad.then(async () => {
-    introOffset = 0; computeGeometry(); updateRing();
+    introOffset = 0; computeGeometry(); updateRing(); layoutMobileStrip();
     await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
     document.body.classList.add("page-ready");
@@ -501,6 +593,12 @@ function initLoader() {
 }
 
 function runIntro() {
+  // The circular spin-in doesn't mean anything for a flat strip -- just
+  // fade the cards in where layoutMobileStrip() already put them.
+  if (isMobile) {
+    gsap.fromTo(items.map((c) => c.cardEl), { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out", stagger: 0.012 });
+    return;
+  }
   introPlaying = true; introOffset = -360; updateRing();
   gsap.to({ v: -360 }, { v: 0, duration: 1.6, ease: "power3.out",
     onUpdate() { introOffset = this.targets()[0].v; updateRing(); },
@@ -518,20 +616,21 @@ function revealUI() {
 }
 
 function onResize() {
-  computeGeometry(); setupItems(); updateRing();
-  if (!isMobile) { buildLabels(); ScrollTrigger.refresh(); }
+  if (isMobile) { layoutMobileStrip(); return; }
+  computeGeometry(); setupItems(); updateRing(); buildLabels(); ScrollTrigger.refresh();
 }
 
 function init() {
   initLoader();
-  computeGeometry();
   buildGallery();      // <-- runs for BOTH desktop AND mobile
-  setupItems();
-  updateRing();
-  gsap.set(gallery, { rotationX: TILT });
   if (isMobile) {
+    buildMobileMarquee();
     initMobile();
   } else {
+    computeGeometry();
+    setupItems();
+    updateRing();
+    gsap.set(gallery, { rotationX: TILT });
     buildLabels(); initScroll(); initCursor();
     scene.addEventListener("pointermove", onPointerMove);
     scene.addEventListener("pointerleave", () => { clearTimeout(pendingHitTimer); pendingHitCard = null; setActive(null); });
