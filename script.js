@@ -188,6 +188,13 @@ function mobileVisibleItems() {
 // scrolled" in pixels (0 = first visible card flush left); dragging moves
 // it, inertia carries it, and it's clamped so you can't drag past the
 // first/last visible card.
+// Tracks which cards were actually playing as of the last layout pass, so
+// ensureVideoSource()/attemptPlay() only fire once per card on the frame it
+// BECOMES visible -- not on literally every frame forever (mobileTick()
+// calls layoutMobileStrip() continuously, ~60/sec, even at rest). Calling
+// .play() every single frame on cards that are already loading/playing was
+// wasteful and, worse, could keep re-interrupting a video's own startup.
+let mobilePlayingCards = new Set();
 function layoutMobileStrip() {
   if (!isMobile) return;
   const rect = gallery.getBoundingClientRect();
@@ -198,10 +205,19 @@ function layoutMobileStrip() {
   visible.forEach((card, i) => {
     gsap.set(card.el, { x: i * MOBILE_STEP - mobileCurrentScrollX, y: centerY, rotationZ: 0 });
     gsap.set(card.cardEl, { rotationY: 0, opacity: 1 });
+    // Only the SELECTED card gets the scale/shadow treatment (see
+    // mobileHighlight), but the window only ever shows two cards at once --
+    // both should actually be playing, not just the highlighted one, or the
+    // second card just sits there showing its static poster forever.
+    if (!mobilePlayingCards.has(card)) { ensureVideoSource(card); attemptPlay(card.media); }
   });
   for (const card of items) {
-    if (!visibleSet.has(card)) gsap.set(card.el, { x: -9999, y: -9999 });
+    if (!visibleSet.has(card)) {
+      gsap.set(card.el, { x: -9999, y: -9999 });
+      if (mobilePlayingCards.has(card) && card.media.src) card.media.pause();
+    }
   }
+  mobilePlayingCards = visibleSet;
 }
 // How far the strip can scroll: from "first visible card flush at the
 // window's left edge" to "last visible card flush at the window's right
