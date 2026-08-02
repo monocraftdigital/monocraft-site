@@ -360,24 +360,25 @@ function processPointer() {
   // Nobody discovers "click a card to lock it" on their own -- hover
   // already changes the preview live, so there's no reason for a visitor to
   // guess that a click does something different. So this protection is
-  // automatic: whichever card hover has already settled on stays put for
-  // ANY cursor movement reasonably inside the preview box, no click
-  // required. A small margin is inset from the box's true edges rather
-  // than using the full rect, because a card whose hitbox only grazes the
-  // very edge of the box can still be genuinely visible (peeking out
-  // beside it) and worth letting hover reach normally; everything more than
-  // INSET px inside the box is guaranteed hidden behind the opaque preview,
-  // so protecting it can't cost access to anything the user could
-  // actually see and aim for. (pinnedCard, set by onRingClick, is honored
-  // too -- clicking still works for anyone who does discover it -- but it's
-  // no longer the only path to a reliable sound button.)
+  // automatic: whichever card hover has already settled on stays put
+  // whenever the cursor is near the sound button, no click required.
+  //
+  // This is deliberately NOT "protect the whole box": the ring rotates via
+  // page scroll, and cards are constantly sliding into and out from behind
+  // the box as it does -- a user tracking a specific card through that
+  // motion can genuinely be aiming for one that's momentarily behind the
+  // box, and freezing the entire box breaks that (tried it -- "most videos
+  // stopped working" was most of the ring's top arc becoming unreachable
+  // during scroll). So only a generous zone around the button itself is
+  // protected -- big enough to comfortably cover the actual approach, but
+  // most of the box stays exactly as reachable as before.
   const anchor = pinnedCard || activeCard;
   if (anchor && previewImgWrap) {
     const r = previewImgWrap.getBoundingClientRect();
-    const INSET = 36;
-    const insideBox = lastPointerX >= r.left + INSET && lastPointerX <= r.right - INSET &&
-                       lastPointerY >= r.top + INSET && lastPointerY <= r.bottom - INSET;
-    if (insideBox) card = anchor;
+    const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
+    const CORNER = 220;
+    const inCorner = insideBox && lastPointerX >= r.right - CORNER && lastPointerY >= r.bottom - CORNER;
+    if (inCorner || (card === null && insideBox)) card = anchor;
   }
   if (card === activeCard || card === pendingHitCard) return;
   // Debounce by time, not by a single frame. The ring is 150 thin,
@@ -499,7 +500,13 @@ function nearestMobileCard() {
   const visible = mobileVisibleItems();
   if (!visible.length) return null;
   const stripW = gallery.getBoundingClientRect().width || MOBILE_VISIBLE_W;
-  const idx = Math.round((mobileCurrentScrollX - MOBILE_CARD_W / 2 + stripW / 2) / MOBILE_STEP);
+  // At rest, with exactly two cards filling the window, this is a dead-even
+  // tie -- Math.round's up-on-.5 behavior would always resolve that to the
+  // RIGHT-hand card, so the left one (the one you actually land on first)
+  // never got selected/highlighted/shown in the big preview at all. The
+  // tiny epsilon breaks the tie toward the left card instead, without
+  // meaningfully affecting any other (non-tied) position.
+  const idx = Math.round((mobileCurrentScrollX - MOBILE_CARD_W / 2 + stripW / 2) / MOBILE_STEP - 1e-6);
   return visible[Math.max(0, Math.min(visible.length - 1, idx))];
 }
 // Flat cards don't get the desktop pullOut()'s 3D translate (that math is
