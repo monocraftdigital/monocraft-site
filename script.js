@@ -376,8 +376,17 @@ function processPointer() {
   if (anchor && previewImgWrap) {
     const r = previewImgWrap.getBoundingClientRect();
     const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
-    const CORNER = 220;
-    const inCorner = insideBox && lastPointerX >= r.right - CORNER && lastPointerY >= r.bottom - CORNER;
+    // The button sits AT the box's own bottom-right corner (right:0;
+    // bottom:0), so real mouse aim naturally overshoots that edge by a few
+    // pixels -- a screen recording caught exactly this: cursor lands just
+    // past r.right/r.bottom, "insideBox" goes false, and protection turned
+    // off at the worst possible moment. OUTSET extends the corner zone
+    // beyond the box's true edge (not just inward) so that overshoot is
+    // still covered; CORNER is how far the whole zone reaches back from the
+    // (outset) corner.
+    const OUTSET = 48, CORNER = 220;
+    const inCorner = lastPointerX >= r.right - CORNER && lastPointerX <= r.right + OUTSET &&
+                      lastPointerY >= r.bottom - CORNER && lastPointerY <= r.bottom + OUTSET;
     if (inCorner || (card === null && insideBox)) card = anchor;
   }
   if (card === activeCard || card === pendingHitCard) return;
