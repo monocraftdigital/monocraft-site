@@ -357,28 +357,27 @@ function processPointer() {
   if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
   let card = hit ? hit._card : null;
-  if (pinnedCard && previewImgWrap) {
-    // Clicking a card pins it (see onRingClick) -- an explicit, deliberate
-    // signal that's worth trusting completely, unlike a hover that merely
-    // happens to pass over a card. Every card whose hitbox falls inside the
-    // preview box's screen rect is visually hidden behind the (opaque)
-    // preview anyway, so the user can't be intentionally aiming for one --
-    // safe to protect the WHOLE box once pinned, not just a guessed corner.
-    // A genuinely different, VISIBLE card outside the box still switches
-    // normally below (and releases the pin -- see setActive).
+  // Nobody discovers "click a card to lock it" on their own -- hover
+  // already changes the preview live, so there's no reason for a visitor to
+  // guess that a click does something different. So this protection is
+  // automatic: whichever card hover has already settled on stays put for
+  // ANY cursor movement reasonably inside the preview box, no click
+  // required. A small margin is inset from the box's true edges rather
+  // than using the full rect, because a card whose hitbox only grazes the
+  // very edge of the box can still be genuinely visible (peeking out
+  // beside it) and worth letting hover reach normally; everything more than
+  // INSET px inside the box is guaranteed hidden behind the opaque preview,
+  // so protecting it can't cost access to anything the user could
+  // actually see and aim for. (pinnedCard, set by onRingClick, is honored
+  // too -- clicking still works for anyone who does discover it -- but it's
+  // no longer the only path to a reliable sound button.)
+  const anchor = pinnedCard || activeCard;
+  if (anchor && previewImgWrap) {
     const r = previewImgWrap.getBoundingClientRect();
-    const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
-    if (insideBox) card = pinnedCard;
-  } else if (activeCard && previewImgWrap) {
-    // Unpinned (no click yet this session): lighter, best-effort protection
-    // for casual hover-only use -- just the "hit nothing" case and a corner
-    // near the button, not the whole box (that broke general ring-browsing
-    // when nothing has been pinned -- see the git history on this block).
-    const r = previewImgWrap.getBoundingClientRect();
-    const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
-    const CORNER = 130;
-    const inCorner = insideBox && lastPointerX >= r.right - CORNER && lastPointerY >= r.bottom - CORNER;
-    if (inCorner || (card === null && insideBox)) card = activeCard;
+    const INSET = 36;
+    const insideBox = lastPointerX >= r.left + INSET && lastPointerX <= r.right - INSET &&
+                       lastPointerY >= r.top + INSET && lastPointerY <= r.bottom - INSET;
+    if (insideBox) card = anchor;
   }
   if (card === activeCard || card === pendingHitCard) return;
   // Debounce by time, not by a single frame. The ring is 150 thin,
