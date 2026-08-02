@@ -93,12 +93,6 @@ const INC = 360 / ITEM_COUNT;
 let radius = 470, yOffset = 0, ringRot = 0, introOffset = 0, introPlaying = false;
 const items = [];
 let activeCard = null;
-// Clicking a ring card "pins" it: the center preview locks to that card and
-// stops following hover entirely, so there's no longer any path by which
-// moving the cursor toward the sound button can make the video change or
-// disappear. Click the pinned card again to release it back to normal
-// hover-follows-preview browsing.
-let pinnedCard = null;
 const isMobile = window.matchMedia(MOBILE_MQ).matches;
 let mobileSelectedCard = null, mobileCurrentScrollX = 0, mobileTargetScrollX = 0;
 let mobileFilter = null; // null = show all; else one of CATEGORIES[].name
@@ -115,41 +109,7 @@ const mpCat = document.getElementById("mpCat");
 const mpTitle = document.getElementById("mpTitle");
 const mobilePreview = document.getElementById("mobilePreview");
 const ringHitbox = document.getElementById("ringHitbox");
-const previewSoundBtn = document.getElementById("previewSound");
-const mpSoundBtn = document.getElementById("mpSound");
 let activePreviewMedia = null, activeMobilePreviewMedia = null;
-
-// The center preview is the one deliberate, single-project view (as opposed
-// to the 40 muted ring cards, where unmuted audio would overlap into noise
-// as the cursor crosses them) -- sound only turns on via an explicit click,
-// which is also what keeps browsers' autoplay-with-sound restrictions from
-// silently blocking playback (hover alone doesn't count as a user gesture).
-function setPreviewSoundState(unmuted) {
-  if (!previewSoundBtn) return;
-  previewSoundBtn.classList.toggle("is-unmuted", unmuted);
-  previewSoundBtn.setAttribute("aria-pressed", unmuted ? "true" : "false");
-}
-function setMobileSoundState(unmuted) {
-  if (!mpSoundBtn) return;
-  mpSoundBtn.classList.toggle("is-unmuted", unmuted);
-  mpSoundBtn.setAttribute("aria-pressed", unmuted ? "true" : "false");
-}
-if (previewSoundBtn) {
-  previewSoundBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (!activePreviewMedia) return;
-    activePreviewMedia.muted = !activePreviewMedia.muted;
-    setPreviewSoundState(!activePreviewMedia.muted);
-  });
-}
-if (mpSoundBtn) {
-  mpSoundBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (!activeMobilePreviewMedia) return;
-    activeMobilePreviewMedia.muted = !activeMobilePreviewMedia.muted;
-    setMobileSoundState(!activeMobilePreviewMedia.muted);
-  });
-}
 
 // Desktop-only: the circular ring's geometry. Mobile lays cards out in a
 // flat horizontal strip instead (see layoutMobileStrip()) -- entirely
@@ -280,11 +240,17 @@ function posterFor(asset) {
 function createMedia(asset, opts) {
   opts = opts || {};
   const v = document.createElement("video");
-  v.muted = true; v.defaultMuted = true; v.loop = true;
+  v.loop = true;
   v.playsInline = true;
-  v.setAttribute("muted", "");
   v.setAttribute("playsinline", "");
   v.setAttribute("webkit-playsinline", "");
+  if (opts.lazy) {
+    // Ring cards: dozens of these can get swept over in quick succession
+    // while browsing the ring, so they always stay muted -- unmuted audio
+    // there would overlap into noise. Only the single, deliberate center
+    // preview (opts.autoplay, below) plays sound.
+    v.muted = true; v.defaultMuted = true; v.setAttribute("muted", "");
+  }
   v.preload = opts.lazy ? "none" : "auto";
   if (opts.lazy) v.poster = posterFor(asset);
   v.addEventListener("error", () => {
@@ -308,6 +274,17 @@ function attemptPlay(videoEl) {
   if (!p || !p.catch) return;
   p.catch((e) => {
     console.error("[video play() rejected]", videoEl.currentSrc || videoEl.src, e);
+    if (!videoEl.muted) {
+      // The center preview starts unmuted -- browsers can block audible
+      // autoplay before the page has seen any user gesture at all. Muted
+      // autoplay is essentially always allowed, so fall back to that
+      // rather than showing nothing; after the user's first click anywhere
+      // on the page, browsers allow unmuted autoplay again automatically,
+      // no extra "unlock" handling needed here.
+      videoEl.muted = true;
+      videoEl.play().catch(() => {});
+      return;
+    }
     setTimeout(() => { if (videoEl.isConnected) videoEl.play().catch(() => {}); }, 200);
   });
 }
@@ -345,50 +322,13 @@ function processPointer() {
   pointerRafQueued = false;
   if (lastPointerX === null) return;
   applyParallax(lastPointerX, lastPointerY);
-  // Freezing the WHOLE preview box while a project is active (an earlier
-  // version of this) was wrong: the box is a big 16:9 rectangle sitting over
-  // most of the ring's top arc, so most cards' hitboxes fall inside its
-  // bounds -- freezing that whole area meant switching between projects
-  // stopped working almost everywhere, not just near the sound button. The
-  // sound button is the one actual pointer-events:auto spot inside the
-  // otherwise pass-through box; only bail out for that (deliberately
-  // enlarged) hit zone.
+  // There's no sound button to navigate to anymore (sound just autoplays
+  // with whatever's hovered -- see createMedia/attemptPlay), which was the
+  // entire reason this used to special-case the preview box's screen area.
+  // Plain hover hit-testing is all that's needed now.
   const target = document.elementFromPoint(lastPointerX, lastPointerY);
-  if (target && target.closest(".sound-toggle")) return;
   const hit = target && target.closest(".item");
-  let card = hit ? hit._card : null;
-  // Nobody discovers "click a card to lock it" on their own -- hover
-  // already changes the preview live, so there's no reason for a visitor to
-  // guess that a click does something different. So this protection is
-  // automatic: whichever card hover has already settled on stays put
-  // whenever the cursor is near the sound button, no click required.
-  //
-  // This is deliberately NOT "protect the whole box": the ring rotates via
-  // page scroll, and cards are constantly sliding into and out from behind
-  // the box as it does -- a user tracking a specific card through that
-  // motion can genuinely be aiming for one that's momentarily behind the
-  // box, and freezing the entire box breaks that (tried it -- "most videos
-  // stopped working" was most of the ring's top arc becoming unreachable
-  // during scroll). So only a generous zone around the button itself is
-  // protected -- big enough to comfortably cover the actual approach, but
-  // most of the box stays exactly as reachable as before.
-  const anchor = pinnedCard || activeCard;
-  if (anchor && previewImgWrap) {
-    const r = previewImgWrap.getBoundingClientRect();
-    const insideBox = lastPointerX >= r.left && lastPointerX <= r.right && lastPointerY >= r.top && lastPointerY <= r.bottom;
-    // The button sits AT the box's own bottom-right corner (right:0;
-    // bottom:0), so real mouse aim naturally overshoots that edge by a few
-    // pixels -- a screen recording caught exactly this: cursor lands just
-    // past r.right/r.bottom, "insideBox" goes false, and protection turned
-    // off at the worst possible moment. OUTSET extends the corner zone
-    // beyond the box's true edge (not just inward) so that overshoot is
-    // still covered; CORNER is how far the whole zone reaches back from the
-    // (outset) corner.
-    const OUTSET = 48, CORNER = 220;
-    const inCorner = lastPointerX >= r.right - CORNER && lastPointerX <= r.right + OUTSET &&
-                      lastPointerY >= r.bottom - CORNER && lastPointerY <= r.bottom + OUTSET;
-    if (inCorner || (card === null && insideBox)) card = anchor;
-  }
+  const card = hit ? hit._card : null;
   if (card === activeCard || card === pendingHitCard) return;
   // Debounce by time, not by a single frame. The ring is 150 thin,
   // overlapping 3D-rotated slivers, so elementFromPoint can return a
@@ -414,28 +354,7 @@ function setActive(card) {
   if (card === activeCard) return;
   const prev = activeCard; activeCard = card;
   if (prev) restoreCard(prev);
-  // Reaching here with a card other than the pinned one only happens via a
-  // genuinely different, visible ring card (processPointer already forces
-  // pinned-card protection for anything inside the preview box) -- that's
-  // the user deliberately browsing away, so the old pin is released rather
-  // than fighting the switch they're asking for.
-  if (pinnedCard && card && card !== pinnedCard) pinnedCard = null;
-  if (card) { pullOut(card); setPreview(card); } else if (!pinnedCard) { clearPreview(); center.classList.remove("show-project"); }
-}
-
-// A click on a ring card pins it -- see the pinnedCard comment above and
-// the protection logic in processPointer(). Clicking the already-pinned
-// card again releases it (does nothing else; it's already showing).
-function onRingClick(e) {
-  if (isMobile) return;
-  const target = document.elementFromPoint(e.clientX, e.clientY);
-  if (target && target.closest(".sound-toggle")) return; // let the button's own click handler run
-  const hit = target && target.closest(".item");
-  const card = hit ? hit._card : null;
-  if (!card) return;
-  if (pinnedCard === card) { pinnedCard = null; return; }
-  pinnedCard = card;
-  if (card !== activeCard) setActive(card);
+  if (card) { pullOut(card); setPreview(card); } else { clearPreview(); center.classList.remove("show-project"); }
 }
 
 function pullOut(card, opts) {
@@ -488,7 +407,6 @@ function setPreview(card) {
   center.classList.add("show-project");
   gsap.fromTo(media, { opacity: 0.35 }, { opacity: 1, duration: 0.5 });
   activePreviewMedia = media;
-  setPreviewSoundState(false);
 }
 // Opacity-fading the center box out (see the .show-project CSS toggle above)
 // doesn't stop playback -- without this the previous project's audio would
@@ -497,7 +415,6 @@ function clearPreview() {
   const oldVideo = previewImgWrap.querySelector("video");
   if (oldVideo) { stopMedia(oldVideo); oldVideo.remove(); }
   activePreviewMedia = null;
-  setPreviewSoundState(false);
 }
 
 // "Selected" is whichever of the two visible cards is nearest the window's
@@ -548,7 +465,6 @@ function updateMobilePreview(card) {
   mpImgWrap.prepend(media);
   gsap.fromTo(media, { opacity: 0.3 }, { opacity: 1, duration: MOBILE_TRANSITION, overwrite: true });
   activeMobilePreviewMedia = media;
-  setMobileSoundState(false);
 }
 
 let mobileDragging = false, mobileVelocity = 0;
@@ -752,7 +668,6 @@ function init() {
     buildLabels(); initScroll(); initCursor();
     scene.addEventListener("pointermove", onPointerMove);
     scene.addEventListener("pointerleave", () => { clearTimeout(pendingHitTimer); pendingHitCard = null; setActive(null); });
-    scene.addEventListener("click", onRingClick);
   }
   requestAnimationFrame(onResize);
   setTimeout(onResize, 300);
