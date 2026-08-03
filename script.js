@@ -109,7 +109,26 @@ const mpCat = document.getElementById("mpCat");
 const mpTitle = document.getElementById("mpTitle");
 const mobilePreview = document.getElementById("mobilePreview");
 const ringHitbox = document.getElementById("ringHitbox");
+const mpSoundBtn = document.getElementById("mpSound");
 let activePreviewMedia = null, activeMobilePreviewMedia = null;
+
+// Mobile keeps an explicit sound button -- unlike the desktop ring, mobile
+// selection is drag/tap-driven rather than hover, so there's no "the video
+// changes out from under the cursor while reaching for the button" failure
+// mode; a small button in the corner of the preview works reliably there.
+function setMobileSoundState(unmuted) {
+  if (!mpSoundBtn) return;
+  mpSoundBtn.classList.toggle("is-unmuted", unmuted);
+  mpSoundBtn.setAttribute("aria-pressed", unmuted ? "true" : "false");
+}
+if (mpSoundBtn) {
+  mpSoundBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!activeMobilePreviewMedia) return;
+    activeMobilePreviewMedia.muted = !activeMobilePreviewMedia.muted;
+    setMobileSoundState(!activeMobilePreviewMedia.muted);
+  });
+}
 
 // Desktop-only: the circular ring's geometry. Mobile lays cards out in a
 // flat horizontal strip instead (see layoutMobileStrip()) -- entirely
@@ -244,11 +263,12 @@ function createMedia(asset, opts) {
   v.playsInline = true;
   v.setAttribute("playsinline", "");
   v.setAttribute("webkit-playsinline", "");
-  if (opts.lazy) {
-    // Ring cards: dozens of these can get swept over in quick succession
-    // while browsing the ring, so they always stay muted -- unmuted audio
-    // there would overlap into noise. Only the single, deliberate center
-    // preview (opts.autoplay, below) plays sound.
+  if (opts.lazy || opts.muted) {
+    // Ring cards (opts.lazy): dozens of these can get swept over in quick
+    // succession while browsing the ring, so they always stay muted --
+    // unmuted audio there would overlap into noise. Mobile's preview
+    // (opts.muted, set at the call site) keeps its own explicit sound
+    // button -- desktop's doesn't (see attemptPlay).
     v.muted = true; v.defaultMuted = true; v.setAttribute("muted", "");
   }
   v.preload = opts.lazy ? "none" : "auto";
@@ -461,10 +481,11 @@ function updateMobilePreview(card) {
   mpCat.textContent = card.project.category; mpTitle.textContent = card.project.title;
   const oldVideo = mpImgWrap.querySelector("video");
   if (oldVideo) { stopMedia(oldVideo); oldVideo.remove(); }
-  const media = createMedia(card.asset, { autoplay: true });
+  const media = createMedia(card.asset, { autoplay: true, muted: true });
   mpImgWrap.prepend(media);
   gsap.fromTo(media, { opacity: 0.3 }, { opacity: 1, duration: MOBILE_TRANSITION, overwrite: true });
   activeMobilePreviewMedia = media;
+  setMobileSoundState(false);
 }
 
 let mobileDragging = false, mobileVelocity = 0;
