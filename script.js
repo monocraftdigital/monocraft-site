@@ -193,7 +193,12 @@ function layoutMobileStrip() {
   for (const card of items) {
     if (!visibleSet.has(card)) {
       gsap.set(card.el, { x: -9999, y: -9999 });
-      if (mobilePlayingCards.has(card) && card.media.src) card.media.pause();
+      // Fully release, not just pause -- see the comment on restoreCard()
+      // for why leaving a card's decoder allocated indefinitely eventually
+      // starves Chrome out of resources for newer hovers. Scrolling the
+      // strip can touch most/all of the (possibly 40-card) list over a
+      // session, so this matters here just as much as on the desktop ring.
+      if (mobilePlayingCards.has(card) && card.media.src) stopMedia(card.media);
     }
   }
   mobilePlayingCards = visibleSet;
@@ -409,13 +414,18 @@ function pullOut(card, opts) {
 function restoreCard(card, duration) {
   card.cardEl.classList.remove("is-active");
   gsap.to(card.cardEl, { x: 0, y: 0, z: 0, scale: 1, duration: duration || HOVER_DURATION, ease: "power2.out", overwrite: true });
-  card.media.pause();
-  // Only seek back to 0 once the video actually has data. Resetting
-  // currentTime on a still-loading element (readyState 0) interrupts its
-  // in-flight fetch -- Firefox reports this as "aborted by the user agent"
-  // -- so fast mouse movement across many cards was cancelling every
-  // video's download before it ever finished.
-  if (card.media.readyState > 0) card.media.currentTime = 0;
+  // Ring cards' <video> elements are created once and reused forever (see
+  // buildGallery) -- until now, leaving the ring just paused the video,
+  // never releasing its decoder. Chrome caps how many media elements can
+  // hold a real decode resource at once far more strictly than Safari/
+  // Firefox; a long browsing session that had hovered most of the 40 cards
+  // was quietly exhausting that cap, so newer hovers stopped producing
+  // frames even though everything "should" have worked (Safari/Firefox
+  // rarely showed this because they're far more permissive here). Fully
+  // releasing back to lazy/poster on the way out -- ensureVideoSource()
+  // re-fetches on the next hover -- means only the handful of cards
+  // actually on screen right now ever hold a real decoder.
+  stopMedia(card.media);
 }
 // Removing a <video> from the DOM does NOT stop an in-flight fetch or
 // decode -- the element keeps loading in the background unless explicitly
