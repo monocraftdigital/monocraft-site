@@ -289,7 +289,8 @@ function createMedia(asset, opts) {
 // mouse movement across many ring cards can also interleave play()/pause()
 // calls. Both surface as a rejected promise; retry once shortly after
 // rather than silently giving up, since the element is genuinely on screen.
-function attemptPlay(videoEl) {
+function attemptPlay(videoEl, retriesLeft) {
+  if (retriesLeft === undefined) retriesLeft = 2;
   const p = videoEl.play();
   if (!p || !p.catch) return;
   p.catch((e) => {
@@ -302,10 +303,21 @@ function attemptPlay(videoEl) {
       // on the page, browsers allow unmuted autoplay again automatically,
       // no extra "unlock" handling needed here.
       videoEl.muted = true;
-      videoEl.play().catch(() => {});
+      attemptPlay(videoEl, retriesLeft);
       return;
     }
-    setTimeout(() => { if (videoEl.isConnected) videoEl.play().catch(() => {}); }, 200);
+    // A rejection here is almost always transient (Chrome's power-saving
+    // pause for a momentarily-backgrounded element, or a real network
+    // hiccup on an actual internet connection rather than localhost) --
+    // back off and retry a couple of times before giving up, rather than
+    // a single 200ms attempt. isConnected/still-paused guards against
+    // resurrecting playback on a card the user has already moved off of
+    // (something else, e.g. restoreCard(), may have legitimately paused it
+    // again in the meantime).
+    if (retriesLeft <= 0) return;
+    setTimeout(() => {
+      if (videoEl.isConnected && videoEl.paused) attemptPlay(videoEl, retriesLeft - 1);
+    }, 250 * (3 - retriesLeft));
   });
 }
 
